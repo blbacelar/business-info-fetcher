@@ -13,6 +13,7 @@ const Popup: React.FC = () => {
   const [results, setResults] = useState<BusinessResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     chrome.storage.local.get(["keyword", "location", "results"], (data) => {
@@ -28,8 +29,12 @@ const Popup: React.FC = () => {
       return;
     }
 
-    setIsLoading(true);
+    // Clear all states before new search
+    setResults([]);
     setError(null);
+    setCurrentPage(1); // Reset pagination
+
+    setIsLoading(true);
 
     // Save search params to storage
     chrome.storage.local.set({ keyword, location });
@@ -73,9 +78,24 @@ const Popup: React.FC = () => {
     chrome.tabs.create({ url });
   };
 
+  const handleClearCache = () => {
+    // Clear state
+    setKeyword("");
+    setLocation("");
+    setResults([]);
+    setError(null);
+
+    // Clear chrome storage
+    chrome.storage.local.clear(() => {
+      console.log("Cache cleared");
+    });
+  };
+
   return (
     <div className="w-screen h-screen p-4 bg-white overflow-auto">
-      <h1 className="text-2xl font-bold mb-4">Business Info Fetcher</h1>
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Business Info Fetcher</h1>
+      </div>
 
       <div className="flex flex-col gap-4 mb-4 max-w-2xl">
         <div className="flex gap-4">
@@ -111,13 +131,21 @@ const Popup: React.FC = () => {
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
             />
           </div>
-          <button
-            onClick={handleSearch}
-            disabled={isLoading || !keyword || !location}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-6 self-end"
-          >
-            {isLoading ? "Searching..." : "Search"}
-          </button>
+          <div className="flex gap-2 self-end">
+            <button
+              onClick={handleClearCache}
+              className="px-4 py-2 text-sm rounded-md bg-secondary hover:bg-secondary/80 transition-colors"
+            >
+              Clear
+            </button>
+            <button
+              onClick={handleSearch}
+              disabled={isLoading || !keyword || !location}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-6"
+            >
+              {isLoading ? "Searching..." : "Search"}
+            </button>
+          </div>
         </div>
 
         {error && <div className="text-red-500">{error}</div>}

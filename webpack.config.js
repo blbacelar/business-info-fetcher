@@ -1,5 +1,10 @@
 const path = require("path");
 const CopyPlugin = require("copy-webpack-plugin");
+const webpack = require("webpack");
+const dotenv = require("dotenv");
+
+// Load environment variables from .env
+const env = dotenv.config().parsed;
 
 module.exports = {
   mode: "development",
@@ -34,6 +39,11 @@ module.exports = {
         { from: "manifest.json", to: "manifest.json" },
         { from: "popup.html", to: "popup.html" },
       ],
+    }),
+    new webpack.DefinePlugin({
+      "process.env.GOOGLE_MAPS_API_KEY": JSON.stringify(
+        env.GOOGLE_MAPS_API_KEY
+      ),
     }),
   ],
 };

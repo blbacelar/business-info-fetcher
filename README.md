@@ -129,3 +129,35 @@ ISC License
 - [Google Places API](https://developers.google.com/maps/documentation/places/web-service/overview)
 - [Lucide Icons](https://lucide.dev/)
 - [Tailwind CSS](https://tailwindcss.com/)
+
+## API Limits
+
+### Google Places API Quotas
+
+- **Basic (Free) Tier**:
+  - 1,000 requests per day
+  - 100 requests per second
+- **Places Text Search**:
+  - $17 USD per 1,000 requests
+  - Maximum of 60 results per query
+
+### Results Limitations
+
+- Text Search returns maximum 20 results per page
+- Maximum of 3 pages (60 total results)
+- Place Details has separate quotas
+
+### Error Handling
+
+The extension handles API limits by:
+
+- Limiting results to first 20 businesses per search
+- Showing clear error messages for quota exceeded
+- Logging API errors for debugging
+- Gracefully handling rate limiting
+
+### Cost Considerations
+
+- Monitor your API usage in Google Cloud Console
+- Set up billing alerts to avoid unexpected charges
+- Consider implementing caching for frequent searches

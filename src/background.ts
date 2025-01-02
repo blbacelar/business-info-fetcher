@@ -31,87 +31,115 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
+const processFacebookUrl = (
+  website: string
+): { website: string; facebook: string } => {
+  const facebookPatterns = [
+    /(?:https?:\/\/)?(?:www\.)?facebook\.com\/[a-zA-Z0-9.]+\/?/i,
+    /(?:https?:\/\/)?(?:www\.)?fb\.com\/[a-zA-Z0-9.]+\/?/i,
+  ];
+
+  for (const pattern of facebookPatterns) {
+    if (pattern.test(website)) {
+      return {
+        website: "",
+        facebook: website.startsWith("http") ? website : `https://${website}`,
+      };
+    }
+  }
+
+  return {
+    website,
+    facebook: "",
+  };
+};
+
 async function searchBusinesses(
   keyword: string,
   location: string
 ): Promise<BusinessInfo[]> {
-  const apiKey = "AIzaSyCK4XcoqrLmsZUAtvztrJzDFNKgNqApHWA";
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    throw new Error("Google Maps API key is not configured");
+  }
 
-  // Include location in the search query
-  const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
-    keyword
-  )}+in+${encodeURIComponent(location)}&key=${apiKey}`;
+  const searchAreas = [
+    `north ${location}`,
+    `south ${location}`,
+    `east ${location}`,
+    `west ${location}`,
+    `central ${location}`,
+    location,
+  ];
 
-  const searchResponse = await fetch(searchUrl);
-  const searchData = await searchResponse.json();
+  try {
+    let allResults = new Map(); // Use Map to store unique results by place_id
 
-  // Then get detailed information for each place
-  const detailedResults = await Promise.all(
-    searchData.results.map(async (place: any) => {
-      const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=name,formatted_address,formatted_phone_number,website&key=${apiKey}`;
-      const detailsResponse = await fetch(detailsUrl);
-      const detailsData = await detailsResponse.json();
+    // Search in each area
+    for (const area of searchAreas) {
+      const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
+        keyword
+      )}+in+${encodeURIComponent(area)}&key=${apiKey}`;
 
-      return {
-        name: detailsData.result.name || place.name,
-        address:
-          detailsData.result.formatted_address || place.formatted_address,
-        phone: detailsData.result.formatted_phone_number,
-        website: detailsData.result.website,
-      };
-    })
-  );
+      const searchResponse = await fetch(searchUrl);
+      const searchData = await searchResponse.json();
 
-  console.log("Detailed results:", detailedResults); // Debug log
-  return detailedResults;
+      if (searchData.status === "OK") {
+        // Add results to Map using place_id as key to ensure uniqueness
+        searchData.results.forEach((place: any) => {
+          if (!allResults.has(place.place_id)) {
+            allResults.set(place.place_id, place);
+          }
+        });
+      }
+    }
+
+    // Convert Map values back to array and limit results
+    const uniqueResults = Array.from(allResults.values()).slice(0, 100);
+
+    const detailedResults = await Promise.all(
+      uniqueResults.map(async (place: any) => {
+        const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=name,formatted_address,formatted_phone_number,website&key=${apiKey}`;
+        const detailsResponse = await fetch(detailsUrl);
+        const detailsData = await detailsResponse.json();
+
+        const website = detailsData.result.website;
+        return {
+          name: detailsData.result.name || place.name,
+          address:
+            detailsData.result.formatted_address || place.formatted_address,
+          phone: detailsData.result.formatted_phone_number,
+          website: website,
+        };
+      })
+    );
+
+    return detailedResults;
+  } catch (error) {
+    console.error("Search error:", error);
+    throw error;
+  }
 }
 
 async function enrichBusinessData(
   business: BusinessInfo
 ): Promise<BusinessInfo> {
-  const emails: string[] = [];
-  let socialLinks: {
-    facebook?: string;
-    twitter?: string;
-    instagram?: string;
-  } = {
-    facebook: undefined,
-    twitter: undefined,
-    instagram: undefined,
-  };
-
-  if (business.website) {
-    try {
-      // Get emails from main page
-      const mainEmails = await scrapeEmailsFromUrl(business.website);
-      emails.push(...mainEmails);
-
-      // Try to find and scrape contact page
-      const contactPageUrl = await findContactPage(business.website);
-      if (contactPageUrl) {
-        const contactEmails = await scrapeEmailsFromUrl(contactPageUrl);
-        emails.push(...contactEmails);
-      }
-
-      // Find social media links
-      socialLinks = await findSocialMediaLinks(business.website);
-    } catch (error) {
-      console.error(
-        `Failed to fetch website data for ${business.name}:`,
-        error
-      );
-    }
-  }
-
-  const uniqueEmails = [...new Set(emails)].filter(
-    (email) => email && isValidEmail(email)
+  console.log(
+    "Enriching business:",
+    business.name,
+    "Website:",
+    business.website
   );
 
-  return {
-    ...business,
-    email: uniqueEmails[0] || undefined,
-    ...socialLinks,
-  };
+  if (business.website) {
+    if (business.website.includes("facebook.com")) {
+      console.log("Found Facebook URL:", business.website);
+      return { ...business, facebook: business.website, website: undefined };
+    }
+    // ... similar for Instagram and Twitter
+  }
+
+  return business;
 }
 
 async function scrapeEmailsFromUrl(url: string): Promise<string[]> {
