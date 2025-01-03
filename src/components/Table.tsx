@@ -39,6 +39,7 @@ export const Table: React.FC<TableProps> = ({ results, handleLinkClick }) => {
     instagram: { value: "", operator: "contains" },
     facebook: { value: "", operator: "contains" },
     twitter: { value: "", operator: "contains" },
+    whatsapp: { value: "", operator: "contains" },
   });
   const [currentPage, setCurrentPage] = React.useState(1);
   const itemsPerPage = 10;

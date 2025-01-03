@@ -9,6 +9,7 @@ interface BusinessInfo {
   facebook?: string;
   twitter?: string;
   instagram?: string;
+  whatsapp?: string;
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -132,11 +133,43 @@ async function enrichBusinessData(
   );
 
   if (business.website) {
-    if (business.website.includes("facebook.com")) {
+    // Check if website is already a social media URL
+    if (
+      business.website.includes("facebook.com") ||
+      business.website.includes("fb.com")
+    ) {
       console.log("Found Facebook URL:", business.website);
       return { ...business, facebook: business.website, website: undefined };
     }
-    // ... similar for Instagram and Twitter
+    if (
+      business.website.includes("instagram.com") ||
+      business.website.includes("@instagram.com")
+    ) {
+      console.log("Found Instagram URL:", business.website);
+      const instagramUrl = business.website.startsWith("@")
+        ? `https://www.instagram.com/${business.website.slice(1)}`
+        : business.website;
+      return { ...business, instagram: instagramUrl, website: undefined };
+    }
+    if (
+      business.website.includes("twitter.com") ||
+      business.website.includes("x.com") ||
+      business.website.includes("@twitter.com")
+    ) {
+      console.log("Found Twitter URL:", business.website);
+      const twitterUrl = business.website.startsWith("@")
+        ? `https://twitter.com/${business.website.slice(1)}`
+        : business.website;
+      return { ...business, twitter: twitterUrl, website: undefined };
+    }
+    if (
+      business.website.includes("wa.me") ||
+      business.website.includes("whatsapp.com") ||
+      business.website.includes("api.whatsapp.com")
+    ) {
+      console.log("Found WhatsApp URL:", business.website);
+      return { ...business, whatsapp: business.website, website: undefined };
+    }
   }
 
   return business;
@@ -192,10 +225,14 @@ async function findSocialMediaLinks(url: string): Promise<{
     const response = await fetch(url);
     const html = await response.text();
 
+    // Look for any links containing social media keywords
     const socialPatterns = {
-      facebook: /href="(https?:\/\/(?:www\.)?facebook\.com\/[^"]+)"/i,
-      twitter: /href="(https?:\/\/(?:www\.)?(?:twitter|x)\.com\/[^"]+)"/i,
-      instagram: /href="(https?:\/\/(?:www\.)?instagram\.com\/[^"]+)"/i,
+      facebook:
+        /(?:href=["'])((?:https?:\/\/)?(?:www\.)?(?:facebook|fb)\.com\/[^"']+)["']/i,
+      instagram:
+        /(?:href=["'])((?:https?:\/\/)?(?:www\.)?instagram\.com\/[^"']+)["']/i,
+      twitter:
+        /(?:href=["'])((?:https?:\/\/)?(?:www\.)?(?:twitter|x)\.com\/[^"']+)["']/i,
     };
 
     const socialUrls: {
@@ -206,18 +243,26 @@ async function findSocialMediaLinks(url: string): Promise<{
       instagram: undefined,
     };
 
+    // Find all links in the HTML
+    const allLinks = html.match(/href=["'][^"']+["']/gi) || [];
+    console.log("Found links:", allLinks.length);
+
+    // Check each link against our patterns
     for (const [platform, pattern] of Object.entries(socialPatterns)) {
-      const match = html.match(pattern);
-      if (match && match[1]) {
-        socialUrls[platform] = match[1];
+      for (const link of allLinks) {
+        const match = link.match(pattern);
+        if (match && match[1]) {
+          const socialUrl = match[1].startsWith("http")
+            ? match[1]
+            : `https://${match[1]}`;
+          socialUrls[platform] = socialUrl;
+          console.log(`Found ${platform} URL:`, socialUrl);
+          break;
+        }
       }
     }
 
-    return socialUrls as {
-      facebook?: string;
-      twitter?: string;
-      instagram?: string;
-    };
+    return socialUrls;
   } catch (error) {
     console.error(`Failed to find social media links on ${url}:`, error);
     return {};

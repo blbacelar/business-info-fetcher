@@ -12,4 +12,5 @@ export interface BusinessResult {
   instagram?: string;
   facebook?: string;
   twitter?: string;
+  whatsapp?: string;
 }

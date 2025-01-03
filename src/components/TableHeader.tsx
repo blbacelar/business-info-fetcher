@@ -1,5 +1,12 @@
 import * as React from "react";
-import { Mail, Facebook, Twitter, Instagram, ArrowUpDown } from "lucide-react";
+import {
+  Mail,
+  Facebook,
+  Twitter,
+  Instagram,
+  ArrowUpDown,
+  MessageCircle,
+} from "lucide-react";
 import { BusinessResult } from "../types";
 
 interface TableHeaderProps {
@@ -24,7 +31,7 @@ export const TableHeader: React.FC<TableHeaderProps> = ({
     {
       key: "address" as keyof BusinessResult,
       label: "Address",
-      width: "250px",
+      width: "300px",
       icon: null,
     },
     {
@@ -48,20 +55,26 @@ export const TableHeader: React.FC<TableHeaderProps> = ({
     {
       key: "facebook" as keyof BusinessResult,
       label: "Facebook",
-      width: "100px",
+      width: "60px",
       icon: <Facebook className="w-4 h-4" />,
     },
     {
       key: "twitter" as keyof BusinessResult,
       label: "Twitter",
-      width: "100px",
+      width: "60px",
       icon: <Twitter className="w-4 h-4" />,
     },
     {
       key: "instagram" as keyof BusinessResult,
       label: "Instagram",
-      width: "100px",
+      width: "60px",
       icon: <Instagram className="w-4 h-4" />,
+    },
+    {
+      key: "whatsapp" as keyof BusinessResult,
+      label: "WhatsApp",
+      width: "60px",
+      icon: <MessageCircle className="w-4 h-4" />,
     },
   ];
 

@@ -28,6 +28,7 @@ export const Filter: React.FC<FilterProps> = ({ onFilterChange }) => {
     instagram: { value: "", operator: "contains" },
     facebook: { value: "", operator: "contains" },
     twitter: { value: "", operator: "contains" },
+    whatsapp: { value: "", operator: "contains" },
   });
 
   const visibleFields = ["name", "address"];

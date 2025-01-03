@@ -1,5 +1,11 @@
 import * as React from "react";
-import { Mail, Facebook, Twitter, Instagram } from "lucide-react";
+import {
+  Mail,
+  Facebook,
+  Twitter,
+  Instagram,
+  MessageCircle,
+} from "lucide-react";
 import { BusinessResult } from "../types";
 
 interface TableRowProps {
@@ -101,6 +107,17 @@ export const TableRow: React.FC<TableRowProps> = ({
             className="inline-flex items-center justify-center w-8 h-8 text-[#E4405F] hover:bg-[#E4405F]/10 rounded-full transition-colors"
           >
             <Instagram className="w-5 h-5" />
+          </a>
+        )}
+      </td>
+      <td className="p-4 align-middle">
+        {result.whatsapp && (
+          <a
+            href={result.whatsapp}
+            onClick={(e) => handleLinkClick(e, result.whatsapp!)}
+            className="inline-flex items-center justify-center w-8 h-8 text-[#25D366] hover:bg-[#25D366]/10 rounded-full transition-colors"
+          >
+            <MessageCircle className="w-5 h-5" />
           </a>
         )}
       </td>
