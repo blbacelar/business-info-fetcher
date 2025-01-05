@@ -7,7 +7,9 @@ interface SocialMediaLinks {
 }
 
 export async function findSocialMediaLinks(
-  url: string
+  url: string,
+  keyword?: string,
+  location?: string
 ): Promise<SocialMediaLinks> {
   try {
     const existingSocial = checkExistingSocialMedia(url);
@@ -40,7 +42,7 @@ export async function findSocialMediaLinks(
     // Simple regex patterns to find social links and emails
     const patterns = {
       facebook:
-        /(?:https?:\/\/)?(?:www\.)?(?:facebook|fb)\.com\/[a-zA-Z0-9.]+/g,
+        /(?:https?:\/\/)?(?:www\.)?(?:facebook|fb)\.com\/(?!(?:\w+\.\w+$))(?:[a-zA-Z0-9._-]+)(?:\/)?/g,
       instagram: /(?:https?:\/\/)?(?:www\.)?instagram\.com\/[a-zA-Z0-9_.]+/g,
       twitter: /(?:https?:\/\/)?(?:www\.)?(?:twitter|x)\.com\/[a-zA-Z0-9_]+/g,
       whatsapp: /(?:https?:\/\/)?(?:api\.)?(?:whatsapp\.com|wa\.me)\/[0-9]+/g,
@@ -55,7 +57,36 @@ export async function findSocialMediaLinks(
     const emailMatch = html.match(patterns.email);
 
     // Assign the first valid match for each
-    if (facebookMatch) socialUrls.facebook = facebookMatch[0];
+    if (facebookMatch) {
+      const validBusinessFacebook = facebookMatch.find((fbUrl) => {
+        const urlLower = fbUrl.toLowerCase();
+
+        // Exclude personal profiles (firstname.lastname pattern)
+        if (/facebook\.com\/\w+\.\w+\/?$/.test(urlLower)) {
+          return false;
+        }
+
+        // Extract business name parts from the domain
+        const domainParts = url
+          .toLowerCase()
+          .replace(/^https?:\/\/(www\.)?/, "")
+          .split(".")[0]
+          .split(/[-_]/);
+
+        // Check if any part of the business name is in the Facebook URL
+        const isBusinessPage = domainParts.some(
+          (part) =>
+            urlLower.includes(part) &&
+            !/^\d+$/.test(urlLower.split("/").pop() || "")
+        );
+
+        return isBusinessPage;
+      });
+
+      if (validBusinessFacebook) {
+        socialUrls.facebook = validBusinessFacebook;
+      }
+    }
     if (instagramMatch) socialUrls.instagram = instagramMatch[0];
     if (twitterMatch) socialUrls.twitter = twitterMatch[0];
     if (whatsappMatch) socialUrls.whatsapp = whatsappMatch[0];
