@@ -7,7 +7,7 @@ const dotenv = require("dotenv");
 const env = dotenv.config().parsed;
 
 module.exports = {
-  mode: "development",
+  mode: process.env.NODE_ENV === "production" ? "production" : "development",
   devtool: "inline-source-map",
   entry: {
     popup: "./src/popup.tsx",
@@ -16,6 +16,12 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: "[name].js",
+    clean: true,
+  },
+  watch: process.env.NODE_ENV === "development",
+  watchOptions: {
+    ignored: /node_modules/,
+    poll: 1000,
   },
   module: {
     rules: [
@@ -32,18 +38,32 @@ module.exports = {
   },
   resolve: {
     extensions: [".tsx", ".ts", ".js"],
+    fallback: {
+      process: require.resolve("process/browser"),
+    },
   },
   plugins: [
     new CopyPlugin({
       patterns: [
         { from: "manifest.json", to: "manifest.json" },
         { from: "popup.html", to: "popup.html" },
+        { from: "src/assets", to: "assets", noErrorOnMissing: true },
       ],
     }),
     new webpack.DefinePlugin({
       "process.env.GOOGLE_MAPS_API_KEY": JSON.stringify(
         env.GOOGLE_MAPS_API_KEY
       ),
+      "process.env.NODE_ENV": JSON.stringify(
+        process.env.NODE_ENV || "development"
+      ),
+    }),
+    new webpack.ProvidePlugin({
+      process: "process/browser",
+      Buffer: ["buffer", "Buffer"],
+    }),
+    new webpack.ProvidePlugin({
+      React: "react",
     }),
   ],
 };

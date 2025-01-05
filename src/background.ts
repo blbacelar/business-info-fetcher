@@ -1,4 +1,11 @@
-console.log("Background script loaded");
+import { scrapeGoogleMaps } from "./utils/scrapGmap";
+import { findSocialMediaLinks } from "./utils/scraper";
+import { searchGooglePlaces } from "./utils/googlePlacesApi";
+
+interface SearchParams {
+  keyword: string;
+  location: string;
+}
 
 interface BusinessInfo {
   name: string;
@@ -12,112 +19,76 @@ interface BusinessInfo {
   whatsapp?: string;
 }
 
+interface Config {
+  dataSource: "maps" | "places";
+}
+
+// Default configuration
+let config: Config = {
+  dataSource: "maps",
+};
+
+// Load configuration
+chrome.storage.local.get(["config"], (result) => {
+  if (result.config) {
+    config = result.config;
+  }
+});
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log("Message received:", request);
+  if (request.action === "updateConfig") {
+    config = { ...config, ...request.config };
+    chrome.storage.local.set({ config });
+    sendResponse({ success: true });
+    return true;
+  }
+
   if (request.action === "search") {
-    searchBusinesses(request.keyword, request.location)
+    searchBusinesses({
+      keyword: request.keyword,
+      location: request.location,
+    })
       .then(async (results) => {
-        console.log("Search results:", results); // Debug log
         const enrichedResults = await Promise.all(
           results.map(enrichBusinessData)
         );
-        console.log("Enriched results:", enrichedResults); // Debug log
         sendResponse(enrichedResults);
       })
       .catch((error) => {
-        console.error("Search error:", error); // Debug log
         sendResponse({ error: error.message });
       });
     return true;
   }
 });
 
-const processFacebookUrl = (
-  website: string
-): { website: string; facebook: string } => {
-  const facebookPatterns = [
-    /(?:https?:\/\/)?(?:www\.)?facebook\.com\/[a-zA-Z0-9.]+\/?/i,
-    /(?:https?:\/\/)?(?:www\.)?fb\.com\/[a-zA-Z0-9.]+\/?/i,
-  ];
-
-  for (const pattern of facebookPatterns) {
-    if (pattern.test(website)) {
-      return {
-        website: "",
-        facebook: website.startsWith("http") ? website : `https://${website}`,
-      };
-    }
-  }
-
-  return {
-    website,
-    facebook: "",
-  };
-};
-
-async function searchBusinesses(
-  keyword: string,
-  location: string
-): Promise<BusinessInfo[]> {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) {
-    throw new Error("Google Maps API key is not configured");
-  }
-
-  const searchAreas = [
-    `north ${location}`,
-    `south ${location}`,
-    `east ${location}`,
-    `west ${location}`,
-    `central ${location}`,
-    location,
-  ];
-
+async function searchBusinesses(params: SearchParams): Promise<BusinessInfo[]> {
   try {
-    let allResults = new Map(); // Use Map to store unique results by place_id
+    const results =
+      config.dataSource === "maps"
+        ? await scrapeGoogleMaps(params.keyword, params.location)
+        : (await searchGooglePlaces(params)).results;
 
-    // Search in each area
-    for (const area of searchAreas) {
-      const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
-        keyword
-      )}+in+${encodeURIComponent(area)}&key=${apiKey}`;
+    // Enrich with website data
+    const enrichedResults = await Promise.all(
+      results.map(async (place: BusinessInfo) => {
+        const website = place.website;
+        const socialLinks = website ? await findSocialMediaLinks(website) : {};
+        const emails = website ? await scrapeEmailsFromUrl(website) : [];
 
-      const searchResponse = await fetch(searchUrl);
-      const searchData = await searchResponse.json();
-
-      if (searchData.status === "OK") {
-        // Add results to Map using place_id as key to ensure uniqueness
-        searchData.results.forEach((place: any) => {
-          if (!allResults.has(place.place_id)) {
-            allResults.set(place.place_id, place);
-          }
-        });
-      }
-    }
-
-    // Convert Map values back to array and limit results
-    const uniqueResults = Array.from(allResults.values()).slice(0, 100);
-
-    const detailedResults = await Promise.all(
-      uniqueResults.map(async (place: any) => {
-        const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=name,formatted_address,formatted_phone_number,website&key=${apiKey}`;
-        const detailsResponse = await fetch(detailsUrl);
-        const detailsData = await detailsResponse.json();
-
-        const website = detailsData.result.website;
         return {
-          name: detailsData.result.name || place.name,
-          address:
-            detailsData.result.formatted_address || place.formatted_address,
-          phone: detailsData.result.formatted_phone_number,
-          website: website,
+          name: place.name,
+          address: place.address,
+          phone: place.phone,
+          website,
+          email: emails[0],
+          ...socialLinks,
         };
       })
     );
 
-    return detailedResults;
+    return enrichedResults;
   } catch (error) {
-    console.error("Search error:", error);
+    console.error("Failed to search businesses:", error);
     throw error;
   }
 }
@@ -125,27 +96,17 @@ async function searchBusinesses(
 async function enrichBusinessData(
   business: BusinessInfo
 ): Promise<BusinessInfo> {
-  console.log(
-    "Enriching business:",
-    business.name,
-    "Website:",
-    business.website
-  );
-
   if (business.website) {
-    // Check if website is already a social media URL
     if (
       business.website.includes("facebook.com") ||
       business.website.includes("fb.com")
     ) {
-      console.log("Found Facebook URL:", business.website);
       return { ...business, facebook: business.website, website: undefined };
     }
     if (
       business.website.includes("instagram.com") ||
       business.website.includes("@instagram.com")
     ) {
-      console.log("Found Instagram URL:", business.website);
       const instagramUrl = business.website.startsWith("@")
         ? `https://www.instagram.com/${business.website.slice(1)}`
         : business.website;
@@ -156,7 +117,6 @@ async function enrichBusinessData(
       business.website.includes("x.com") ||
       business.website.includes("@twitter.com")
     ) {
-      console.log("Found Twitter URL:", business.website);
       const twitterUrl = business.website.startsWith("@")
         ? `https://twitter.com/${business.website.slice(1)}`
         : business.website;
@@ -167,7 +127,6 @@ async function enrichBusinessData(
       business.website.includes("whatsapp.com") ||
       business.website.includes("api.whatsapp.com")
     ) {
-      console.log("Found WhatsApp URL:", business.website);
       return { ...business, whatsapp: business.website, website: undefined };
     }
   }
@@ -175,12 +134,20 @@ async function enrichBusinessData(
   return business;
 }
 
-async function scrapeEmailsFromUrl(url: string): Promise<string[]> {
+export async function scrapeEmailsFromUrl(url: string): Promise<string[]> {
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      mode: "no-cors",
+      headers: {
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      },
+    });
     const html = await response.text();
 
-    // Enhanced email regex to avoid false positives
     const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
     return html.match(emailRegex) || [];
   } catch (error) {
@@ -189,98 +156,8 @@ async function scrapeEmailsFromUrl(url: string): Promise<string[]> {
   }
 }
 
-async function findContactPage(baseUrl: string): Promise<string | null> {
-  try {
-    const response = await fetch(baseUrl);
-    const html = await response.text();
-
-    // Common contact page patterns
-    const contactPatterns = [
-      /href="([^"]*contact[^"]*)">/i,
-      /href="([^"]*about[^"]*)">/i,
-      /href="([^"]*get-in-touch[^"]*)">/i,
-    ];
-
-    for (const pattern of contactPatterns) {
-      const match = html.match(pattern);
-      if (match && match[1]) {
-        const contactUrl = new URL(match[1], baseUrl).href;
-        return contactUrl;
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error(`Failed to find contact page on ${baseUrl}:`, error);
-    return null;
-  }
-}
-
-async function findSocialMediaLinks(url: string): Promise<{
-  facebook?: string;
-  twitter?: string;
-  instagram?: string;
-}> {
-  try {
-    const response = await fetch(url);
-    const html = await response.text();
-
-    // Look for any links containing social media keywords
-    const socialPatterns = {
-      facebook:
-        /(?:href=["'])((?:https?:\/\/)?(?:www\.)?(?:facebook|fb)\.com\/[^"']+)["']/i,
-      instagram:
-        /(?:href=["'])((?:https?:\/\/)?(?:www\.)?instagram\.com\/[^"']+)["']/i,
-      twitter:
-        /(?:href=["'])((?:https?:\/\/)?(?:www\.)?(?:twitter|x)\.com\/[^"']+)["']/i,
-    };
-
-    const socialUrls: {
-      [key: string]: string | undefined;
-    } = {
-      facebook: undefined,
-      twitter: undefined,
-      instagram: undefined,
-    };
-
-    // Find all links in the HTML
-    const allLinks = html.match(/href=["'][^"']+["']/gi) || [];
-    console.log("Found links:", allLinks.length);
-
-    // Check each link against our patterns
-    for (const [platform, pattern] of Object.entries(socialPatterns)) {
-      for (const link of allLinks) {
-        const match = link.match(pattern);
-        if (match && match[1]) {
-          const socialUrl = match[1].startsWith("http")
-            ? match[1]
-            : `https://${match[1]}`;
-          socialUrls[platform] = socialUrl;
-          console.log(`Found ${platform} URL:`, socialUrl);
-          break;
-        }
-      }
-    }
-
-    return socialUrls;
-  } catch (error) {
-    console.error(`Failed to find social media links on ${url}:`, error);
-    return {};
-  }
-}
-
-function isValidEmail(email: string): boolean {
-  // Basic email validation
-  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  return (
-    emailRegex.test(email) &&
-    !email.includes("example.com") &&
-    !email.includes("domain.com")
-  );
-}
-
 chrome.action.onClicked.addListener(() => {
   chrome.tabs.create({
-    url: "popup.html",
+    url: chrome.runtime.getURL("popup.html"),
   });
 });

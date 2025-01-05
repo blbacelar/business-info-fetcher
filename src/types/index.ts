@@ -14,3 +14,15 @@ export interface BusinessResult {
   twitter?: string;
   whatsapp?: string;
 }
+
+export interface BusinessInfo {
+  name: string;
+  address: string;
+  phone?: string;
+  website?: string;
+  email?: string;
+  facebook?: string;
+  twitter?: string;
+  instagram?: string;
+  whatsapp?: string;
+}

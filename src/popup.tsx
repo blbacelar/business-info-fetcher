@@ -14,6 +14,7 @@ const Popup: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [dataSource, setDataSource] = useState<"maps" | "places">("maps");
 
   useEffect(() => {
     chrome.storage.local.get(["keyword", "location", "results"], (data) => {
@@ -22,6 +23,23 @@ const Popup: React.FC = () => {
       if (data.results) setResults(data.results);
     });
   }, []);
+
+  useEffect(() => {
+    // Load initial config
+    chrome.storage.local.get(["config"], (result) => {
+      if (result.config?.dataSource) {
+        setDataSource(result.config.dataSource);
+      }
+    });
+  }, []);
+
+  const handleDataSourceChange = (value: "maps" | "places") => {
+    setDataSource(value);
+    chrome.runtime.sendMessage({
+      action: "updateConfig",
+      config: { dataSource: value },
+    });
+  };
 
   const handleSearch = () => {
     if (!keyword || !location) {
@@ -146,6 +164,22 @@ const Popup: React.FC = () => {
               {isLoading ? "Searching..." : "Search"}
             </button>
           </div>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700">
+            Data Source
+          </label>
+          <select
+            value={dataSource}
+            onChange={(e) =>
+              handleDataSourceChange(e.target.value as "maps" | "places")
+            }
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          >
+            <option value="maps">Google Maps (Scraping)</option>
+            <option value="places">Google Places API</option>
+          </select>
         </div>
 
         {error && <div className="text-red-500">{error}</div>}
