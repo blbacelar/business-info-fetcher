@@ -4,7 +4,10 @@ import { searchGooglePlaces } from "./utils/googlePlacesApi";
 
 interface SearchParams {
   keyword: string;
-  location: string;
+  location?: string;
+  latitude?: number;
+  longitude?: number;
+  radius?: number;
 }
 
 interface BusinessInfo {
@@ -63,10 +66,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 async function searchBusinesses(params: SearchParams): Promise<BusinessInfo[]> {
   try {
-    const results =
-      config.dataSource === "maps"
-        ? await scrapeGoogleMaps(params.keyword, params.location)
-        : (await searchGooglePlaces(params)).results;
+    let results;
+    if (params.latitude && params.longitude && params.radius) {
+      // Search using coordinates and radius
+      results = await searchGooglePlacesByCoordinates(
+        params.keyword,
+        params.latitude,
+        params.longitude,
+        params.radius
+      );
+    } else {
+      // Fallback to the existing location-based search
+      results =
+        config.dataSource === "maps"
+          ? await scrapeGoogleMaps(params.keyword, params.location || "")
+          : (
+              await searchGooglePlaces({
+                keyword: params.keyword,
+                location: params.location || "",
+              })
+            ).results;
+    }
 
     // Enrich with website data
     const enrichedResults = await Promise.all(
@@ -90,6 +110,34 @@ async function searchBusinesses(params: SearchParams): Promise<BusinessInfo[]> {
   } catch (error) {
     console.error("Failed to search businesses:", error);
     throw error;
+  }
+}
+
+async function searchGooglePlacesByCoordinates(
+  keyword: string,
+  latitude: number,
+  longitude: number,
+  radius: number
+): Promise<BusinessInfo[]> {
+  try {
+    // Implement a fallback search method
+    // This could be a different API or a more generic search
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+      keyword
+    )}&format=json&limit=10`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    return data.map((place: any) => ({
+      name: place.display_name,
+      address: place.display_name,
+      latitude: parseFloat(place.lat),
+      longitude: parseFloat(place.lon),
+    }));
+  } catch (error) {
+    console.error("Error searching places:", error);
+    return [];
   }
 }
 

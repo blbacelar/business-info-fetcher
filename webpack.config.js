@@ -34,6 +34,10 @@ module.exports = {
         test: /\.css$/,
         use: ["style-loader", "css-loader", "postcss-loader"],
       },
+      {
+        test: /\.(png|jpg|gif)$/i,
+        type: "asset/resource",
+      },
     ],
   },
   resolve: {
@@ -45,18 +49,18 @@ module.exports = {
   plugins: [
     new CopyPlugin({
       patterns: [
+        {
+          from: "public/popup.html",
+          to: "popup.html",
+        },
         { from: "manifest.json", to: "manifest.json" },
-        { from: "popup.html", to: "popup.html" },
         { from: "src/assets", to: "assets", noErrorOnMissing: true },
       ],
     }),
     new webpack.DefinePlugin({
-      "process.env.GOOGLE_MAPS_API_KEY": JSON.stringify(
-        env.GOOGLE_MAPS_API_KEY
-      ),
-      "process.env.NODE_ENV": JSON.stringify(
-        process.env.NODE_ENV || "development"
-      ),
+      "process.env": {
+        NODE_ENV: JSON.stringify(process.env.NODE_ENV || "development"),
+      },
     }),
     new webpack.ProvidePlugin({
       process: "process/browser",

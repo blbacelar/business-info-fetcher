@@ -3,17 +3,14 @@
   "name": "Business Info Fetcher",
   "version": "1.0",
   "description": "Fetches business information",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": ["https://maps.googleapis.com/*", "https://*/*"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
   "action": {
     "default_title": "Business Info Fetcher"
   },
-  "permissions": ["activeTab", "scripting", "webNavigation", "storage", "tabs"],
-  "host_permissions": [
-    "https://*/*",
-    "http://*/*",
-    "https://www.google.com/maps/*",
-    "https://www.googleadservices.com/*",
-    "chrome-extension://*/*"
-  ],
   "background": {
     "service_worker": "background.js"
   }

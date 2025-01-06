@@ -4,6 +4,7 @@
     "esModuleInterop": true,
     "target": "es6",
     "module": "commonjs",
-    "strict": true
+    "strict": true,
+    "typeRoots": ["./node_modules/@types", "./src/types"]
   }
 }

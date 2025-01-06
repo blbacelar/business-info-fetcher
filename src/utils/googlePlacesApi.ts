@@ -2,69 +2,22 @@ import { SearchParams, BusinessResult } from "../types";
 import { findSocialMediaLinks } from "./scraper";
 import { scrapeEmailsFromUrl } from "../background";
 
-export async function searchGooglePlaces(
-  params: SearchParams,
-  nextPageToken?: string
-): Promise<{
-  results: BusinessResult[];
-  nextPageToken?: string;
-}> {
-  try {
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-    if (!apiKey) {
-      throw new Error("Google Maps API key is not configured");
-    }
+export async function searchGooglePlaces(params: SearchParams) {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+    params.keyword
+  )}&format=json&limit=10`;
 
-    // First get all places from API
-    const placesFromApi = await fetchPlacesFromApi(params, apiKey);
-    console.log("Places fetched from API:", placesFromApi);
+  const response = await fetch(url);
+  const data = await response.json();
 
-    // Then process and scrape data
-    const processedResults = await Promise.all(
-      placesFromApi.map(async (place) => {
-        try {
-          const website = place.website;
-          console.log(`Processing website: ${website} for ${place.name}`);
-
-          const socialLinks = website
-            ? await findSocialMediaLinks(website)
-            : {};
-
-          const result: BusinessResult = {
-            name: place.name,
-            address: place.address,
-            phone: place.phone,
-            website,
-            ...socialLinks,
-          };
-
-          if (website) {
-            const emails = await scrapeEmailsFromUrl(website);
-            if (emails.length > 0) {
-              result.email = emails[0];
-            }
-          }
-
-          return result;
-        } catch (e) {
-          console.error(`Failed to process place:`, e);
-          return null;
-        }
-      })
-    );
-
-    const results = processedResults.filter(
-      (result): result is BusinessResult => result !== null
-    );
-
-    return {
-      results,
-      nextPageToken,
-    };
-  } catch (error) {
-    console.error("Failed to search businesses:", error);
-    return { results: [] };
-  }
+  return {
+    results: data.map((place: any) => ({
+      name: place.display_name,
+      address: place.display_name,
+      latitude: parseFloat(place.lat),
+      longitude: parseFloat(place.lon),
+    })),
+  };
 }
 
 // Separate function to fetch places from API

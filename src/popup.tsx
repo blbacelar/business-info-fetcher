@@ -1,11 +1,12 @@
 console.log("Popup script loaded");
 
 import * as React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import * as ReactDOM from "react-dom/client";
 import "./styles/globals.css";
 import { Table } from "./components/Table";
-import { BusinessResult } from "./types";
+import { BusinessResult, SearchParams } from "./types";
+import { MapSelector } from "./components/MapSelector";
 
 const Popup: React.FC = () => {
   const [keyword, setKeyword] = useState("");
@@ -15,6 +16,16 @@ const Popup: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [dataSource, setDataSource] = useState<"maps" | "places">("maps");
+  const [isMapOpen, setIsMapOpen] = useState(false);
+  const locationInputRef = useRef<HTMLInputElement>(null);
+  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<
+    { description: string; place_id: string }[]
+  >([]);
+  const [selectedLocation, setSelectedLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+  const [searchRadius, setSearchRadius] = useState<number | null>(null);
 
   useEffect(() => {
     chrome.storage.local.get(["keyword", "location", "results"], (data) => {
@@ -42,23 +53,36 @@ const Popup: React.FC = () => {
   };
 
   const handleSearch = () => {
-    if (!keyword || !location) {
-      setError("Please enter both keyword and location");
+    if (!keyword) {
+      setError("Please enter a business type.");
+      return;
+    }
+
+    if (!location && !selectedLocation) {
+      setError("Please enter a location or select one from the map.");
       return;
     }
 
     // Clear all states before new search
     setResults([]);
     setError(null);
-    setCurrentPage(1); // Reset pagination
+    setCurrentPage(1);
 
     setIsLoading(true);
 
     // Save search params to storage
     chrome.storage.local.set({ keyword, location });
 
+    const searchParams: SearchParams = { keyword, location };
     chrome.runtime.sendMessage(
-      { action: "search", keyword, location },
+      {
+        action: "search",
+        keyword: searchParams.keyword,
+        location: selectedLocation
+          ? `${selectedLocation.lat},${selectedLocation.lng}`
+          : searchParams.location,
+        radius: selectedLocation ? searchRadius : undefined,
+      },
       (response) => {
         setIsLoading(false);
         if (response.error) {
@@ -80,6 +104,7 @@ const Popup: React.FC = () => {
       setKeyword(value);
     } else {
       setLocation(value);
+      // Implement autocomplete logic here
     }
 
     if (!value && field === "keyword") {
@@ -109,6 +134,45 @@ const Popup: React.FC = () => {
     });
   };
 
+  const openMap = () => {
+    setIsMapOpen(true);
+  };
+
+  const closeMap = () => {
+    setIsMapOpen(false);
+  };
+
+  const handleLocationSelect = (suggestion: {
+    description: string;
+    place_id: string;
+  }) => {
+    setLocation(suggestion.description);
+    setAutocompleteSuggestions([]);
+    // Simple geocoding would require another service or API
+  };
+
+  const handleLocationInputChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setLocation(e.target.value);
+    // Remove Google Places autocomplete
+    // You might want to implement a simple local/API-based autocomplete
+  };
+
+  const handleLocationSelectFromMap = (
+    location: { lat: number; lng: number },
+    radius: number
+  ) => {
+    setSelectedLocation(location);
+    setSearchRadius(radius);
+    setLocation(
+      `${location.lat.toFixed(4)}, ${location.lng.toFixed(
+        4
+      )} (Radius: ${radius}m)`
+    );
+    closeMap();
+  };
+
   return (
     <div className="w-screen h-screen p-4 bg-white overflow-auto">
       <div className="flex justify-between items-center mb-4">
@@ -133,21 +197,44 @@ const Popup: React.FC = () => {
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
             />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 relative">
             <label
               htmlFor="location"
               className="text-sm font-medium mb-1.5 block text-gray-600"
             >
               Location
             </label>
-            <input
-              id="location"
-              type="text"
-              value={location}
-              onChange={(e) => handleInputChange(e, "location")}
-              placeholder="Enter city or location"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-            />
+            <div className="flex">
+              <input
+                id="location"
+                type="text"
+                value={location}
+                onChange={handleLocationInputChange}
+                placeholder="Enter city or location"
+                className="flex-1 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                ref={locationInputRef}
+              />
+              <button
+                type="button"
+                onClick={openMap}
+                className="ml-2 px-4 py-2 text-sm rounded-md bg-secondary hover:bg-secondary/80 transition-colors"
+              >
+                Map
+              </button>
+            </div>
+            {autocompleteSuggestions.length > 0 && (
+              <ul className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-md">
+                {autocompleteSuggestions.map((suggestion) => (
+                  <li
+                    key={suggestion.place_id}
+                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                    onClick={() => handleLocationSelect(suggestion)}
+                  >
+                    {suggestion.description}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <div className="flex gap-2 self-end">
             <button
@@ -158,7 +245,9 @@ const Popup: React.FC = () => {
             </button>
             <button
               onClick={handleSearch}
-              disabled={isLoading || !keyword || !location}
+              disabled={
+                isLoading || !keyword || (!location && !selectedLocation)
+              }
               className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-6"
             >
               {isLoading ? "Searching..." : "Search"}
@@ -184,6 +273,13 @@ const Popup: React.FC = () => {
 
         {error && <div className="text-red-500">{error}</div>}
       </div>
+
+      {isMapOpen && (
+        <MapSelector
+          onLocationSelected={handleLocationSelectFromMap}
+          onClose={closeMap}
+        />
+      )}
 
       <Table results={results} handleLinkClick={handleLinkClick} />
     </div>

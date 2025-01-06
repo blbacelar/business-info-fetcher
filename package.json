@@ -4,7 +4,6 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "build": "webpack --config webpack.config.js",
     "dev": "webpack --config webpack.config.js --watch --mode=development"
   },
@@ -15,10 +14,12 @@
     "@radix-ui/react-slot": "1.1.1",
     "@shadcn/ui": "0.0.4",
     "@types/chrome": "0.0.287",
+    "@types/leaflet": "1.9.15",
     "@types/react": "19.0.2",
     "@types/react-dom": "19.0.2",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
+    "leaflet": "1.9.4",
     "lucide-react": "0.469.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Search Circle -->
+  <circle cx="11" cy="11" r="6" fill="none" stroke="#4285F4" stroke-width="2"/>
+  <!-- Search Handle -->
+  <path d="M15.5 15.5L19 19" stroke="#4285F4" stroke-width="2" stroke-linecap="round"/>
+  <!-- Location Dot -->
+  <circle cx="11" cy="11" r="2" fill="#4285F4"/>
+</svg>
