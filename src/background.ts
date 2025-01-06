@@ -1,26 +1,7 @@
 import { scrapeGoogleMaps } from "./utils/scrapGmap";
 import { findSocialMediaLinks } from "./utils/scraper";
 import { searchGooglePlaces } from "./utils/googlePlacesApi";
-
-interface SearchParams {
-  keyword: string;
-  location?: string;
-  latitude?: number;
-  longitude?: number;
-  radius?: number;
-}
-
-interface BusinessInfo {
-  name: string;
-  address: string;
-  phone?: string;
-  website?: string;
-  email?: string;
-  facebook?: string;
-  twitter?: string;
-  instagram?: string;
-  whatsapp?: string;
-}
+import { SearchParams, BusinessResult } from "./types";
 
 interface Config {
   dataSource: "maps" | "places";
@@ -50,6 +31,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     searchBusinesses({
       keyword: request.keyword,
       location: request.location,
+      latitude: request.latitude,
+      longitude: request.longitude,
+      radius: request.radius,
     })
       .then(async (results) => {
         const enrichedResults = await Promise.all(
@@ -64,33 +48,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-async function searchBusinesses(params: SearchParams): Promise<BusinessInfo[]> {
+async function searchBusinesses(
+  params: SearchParams
+): Promise<BusinessResult[]> {
   try {
+    console.log("Searching businesses with params:", params);
     let results;
+
     if (params.latitude && params.longitude && params.radius) {
-      // Search using coordinates and radius
-      results = await searchGooglePlacesByCoordinates(
-        params.keyword,
-        params.latitude,
-        params.longitude,
-        params.radius
-      );
+      console.log("Using coordinate-based search");
+      const placesResults = await searchGooglePlaces(params);
+      results = placesResults.results;
     } else {
-      // Fallback to the existing location-based search
+      console.log("Using location-based search");
       results =
         config.dataSource === "maps"
           ? await scrapeGoogleMaps(params.keyword, params.location || "")
-          : (
-              await searchGooglePlaces({
-                keyword: params.keyword,
-                location: params.location || "",
-              })
-            ).results;
+          : (await searchGooglePlaces(params)).results;
     }
 
     // Enrich with website data
     const enrichedResults = await Promise.all(
-      results.map(async (place: BusinessInfo) => {
+      results.map(async (place: BusinessResult) => {
         const website = place.website;
         const socialLinks = website ? await findSocialMediaLinks(website) : {};
         const emails = website ? await scrapeEmailsFromUrl(website) : [];
@@ -118,7 +97,7 @@ async function searchGooglePlacesByCoordinates(
   latitude: number,
   longitude: number,
   radius: number
-): Promise<BusinessInfo[]> {
+): Promise<BusinessResult[]> {
   try {
     // Implement a fallback search method
     // This could be a different API or a more generic search
@@ -142,8 +121,8 @@ async function searchGooglePlacesByCoordinates(
 }
 
 async function enrichBusinessData(
-  business: BusinessInfo
-): Promise<BusinessInfo> {
+  business: BusinessResult
+): Promise<BusinessResult> {
   if (business.website) {
     if (
       business.website.includes("facebook.com") ||

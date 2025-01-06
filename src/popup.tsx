@@ -163,13 +163,41 @@ const Popup: React.FC = () => {
     location: { lat: number; lng: number },
     radius: number
   ) => {
+    console.log("Selected location:", location);
+    console.log("Selected radius:", radius);
+
     setSelectedLocation(location);
     setSearchRadius(radius);
+
+    // Set display text for UI
     setLocation(
       `${location.lat.toFixed(4)}, ${location.lng.toFixed(
         4
       )} (Radius: ${radius}m)`
     );
+
+    // Update search parameters with coordinates
+    chrome.runtime.sendMessage(
+      {
+        action: "search",
+        keyword,
+        location: `${location.lat},${location.lng}`,
+        latitude: location.lat,
+        longitude: location.lng,
+        radius: radius, // This is in meters, which is correct for the Places API
+      },
+      (response) => {
+        console.log("Search response:", response);
+        setIsLoading(false);
+        if (response.error) {
+          setError(response.error);
+        } else {
+          setResults(response);
+          chrome.storage.local.set({ results: response });
+        }
+      }
+    );
+
     closeMap();
   };
 

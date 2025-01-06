@@ -1,6 +1,9 @@
 export interface SearchParams {
   keyword: string;
-  location: string;
+  location?: string;
+  latitude?: number;
+  longitude?: number;
+  radius?: number;
 }
 
 export interface BusinessResult {
@@ -9,9 +12,9 @@ export interface BusinessResult {
   phone?: string;
   website?: string;
   email?: string;
-  instagram?: string;
   facebook?: string;
   twitter?: string;
+  instagram?: string;
   whatsapp?: string;
 }
 

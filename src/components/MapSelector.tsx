@@ -10,6 +10,17 @@ interface MapSelectorProps {
   onClose: () => void;
 }
 
+const customIcon = L.icon({
+  iconUrl:
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
 export const MapSelector: React.FC<MapSelectorProps> = ({
   onLocationSelected,
   onClose,
@@ -41,28 +52,66 @@ export const MapSelector: React.FC<MapSelectorProps> = ({
         (position) => {
           console.log("User location:", position.coords);
           const { latitude, longitude } = position.coords;
+          const accuracy = position.coords.accuracy;
 
           console.log("Initializing new Leaflet map at user location");
           const newMap = L.map(mapRef.current!).setView(
             [latitude, longitude],
             13
           );
-          console.log("Map instance created:", newMap);
 
-          console.log("Adding tile layer");
+          // Add the tile layer
           const tileLayer = L.tileLayer(
             "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
             {
               attribution: "© OpenStreetMap contributors",
             }
           );
-
-          console.log("Adding tile layer to map");
           tileLayer.addTo(newMap);
+
+          // Add the blue dot for current location
+          const locationMarker = L.circleMarker([latitude, longitude], {
+            radius: 8,
+            fillColor: "#2196F3",
+            fillOpacity: 1,
+            color: "#fff",
+            weight: 2,
+          }).addTo(newMap);
+
+          // Add accuracy circle
+          const accuracyCircle = L.circle([latitude, longitude], {
+            radius: accuracy,
+            fillColor: "#2196F3",
+            fillOpacity: 0.15,
+            color: "#2196F3",
+            weight: 0,
+          }).addTo(newMap);
+
+          // Watch for location updates
+          const watchId = navigator.geolocation.watchPosition(
+            (newPosition) => {
+              const newLat = newPosition.coords.latitude;
+              const newLng = newPosition.coords.longitude;
+              const newAccuracy = newPosition.coords.accuracy;
+
+              locationMarker.setLatLng([newLat, newLng]);
+              accuracyCircle.setLatLng([newLat, newLng]);
+              accuracyCircle.setRadius(newAccuracy);
+            },
+            undefined,
+            {
+              enableHighAccuracy: true,
+            }
+          );
 
           console.log("Setting map in state");
           setMap(newMap);
           setIsLoading(false);
+
+          // Cleanup location watching
+          return () => {
+            navigator.geolocation.clearWatch(watchId);
+          };
         },
         (error) => {
           console.error("Error getting location:", error);
@@ -108,7 +157,11 @@ export const MapSelector: React.FC<MapSelectorProps> = ({
       }
 
       console.log("Creating new marker");
-      const newMarker = L.marker(e.latlng, { draggable: true }).addTo(map);
+      const newMarker = L.marker(e.latlng, {
+        draggable: true,
+        icon: customIcon,
+      }).addTo(map);
+
       console.log("Creating new circle");
       const newCircle = L.circle(e.latlng, {
         radius,
@@ -116,6 +169,13 @@ export const MapSelector: React.FC<MapSelectorProps> = ({
         fillColor: "#f03",
         fillOpacity: 0.2,
       }).addTo(map);
+
+      // Update circle when marker is dragged
+      newMarker.on("drag", (e) => {
+        const marker = e.target;
+        const position = marker.getLatLng();
+        newCircle.setLatLng(position);
+      });
 
       setMarker(newMarker);
       setCircle(newCircle);
