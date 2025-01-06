@@ -1,7 +1,23 @@
 import { scrapeGoogleMaps } from "./utils/scrapGmap";
 import { findSocialMediaLinks } from "./utils/scraper";
 import { searchGooglePlaces } from "./utils/googlePlacesApi";
-import { SearchParams, BusinessResult } from "./types";
+
+interface SearchParams {
+  keyword: string;
+  location: string;
+}
+
+interface BusinessInfo {
+  name: string;
+  address: string;
+  phone?: string;
+  website?: string;
+  email?: string;
+  facebook?: string;
+  twitter?: string;
+  instagram?: string;
+  whatsapp?: string;
+}
 
 interface Config {
   dataSource: "maps" | "places";
@@ -9,7 +25,7 @@ interface Config {
 
 // Default configuration
 let config: Config = {
-  dataSource: "maps",
+  dataSource: "places",
 };
 
 // Load configuration
@@ -31,9 +47,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     searchBusinesses({
       keyword: request.keyword,
       location: request.location,
-      latitude: request.latitude,
-      longitude: request.longitude,
-      radius: request.radius,
     })
       .then(async (results) => {
         const enrichedResults = await Promise.all(
@@ -48,28 +61,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-async function searchBusinesses(
-  params: SearchParams
-): Promise<BusinessResult[]> {
+async function searchBusinesses(params: SearchParams): Promise<BusinessInfo[]> {
   try {
-    console.log("Searching businesses with params:", params);
-    let results;
-
-    if (params.latitude && params.longitude && params.radius) {
-      console.log("Using coordinate-based search");
-      const placesResults = await searchGooglePlaces(params);
-      results = placesResults.results;
-    } else {
-      console.log("Using location-based search");
-      results =
-        config.dataSource === "maps"
-          ? await scrapeGoogleMaps(params.keyword, params.location || "")
-          : (await searchGooglePlaces(params)).results;
-    }
+    const results =
+      config.dataSource === "maps"
+        ? await scrapeGoogleMaps(params.keyword, params.location)
+        : (await searchGooglePlaces(params)).results;
 
     // Enrich with website data
     const enrichedResults = await Promise.all(
-      results.map(async (place: BusinessResult) => {
+      results.map(async (place: BusinessInfo) => {
         const website = place.website;
         const socialLinks = website ? await findSocialMediaLinks(website) : {};
         const emails = website ? await scrapeEmailsFromUrl(website) : [];
@@ -92,37 +93,9 @@ async function searchBusinesses(
   }
 }
 
-async function searchGooglePlacesByCoordinates(
-  keyword: string,
-  latitude: number,
-  longitude: number,
-  radius: number
-): Promise<BusinessResult[]> {
-  try {
-    // Implement a fallback search method
-    // This could be a different API or a more generic search
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
-      keyword
-    )}&format=json&limit=10`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    return data.map((place: any) => ({
-      name: place.display_name,
-      address: place.display_name,
-      latitude: parseFloat(place.lat),
-      longitude: parseFloat(place.lon),
-    }));
-  } catch (error) {
-    console.error("Error searching places:", error);
-    return [];
-  }
-}
-
 async function enrichBusinessData(
-  business: BusinessResult
-): Promise<BusinessResult> {
+  business: BusinessInfo
+): Promise<BusinessInfo> {
   if (business.website) {
     if (
       business.website.includes("facebook.com") ||
