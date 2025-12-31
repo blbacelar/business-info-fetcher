@@ -6,8 +6,16 @@
   "action": {
     "default_popup": ""
   },
-  "permissions": ["activeTab", "scripting", "webNavigation", "storage", "tabs"],
-  "host_permissions": ["https://maps.googleapis.com/*", "https://*/*"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "webNavigation",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js"
   }

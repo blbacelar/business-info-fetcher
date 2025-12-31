@@ -14,15 +14,18 @@ const Popup: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+
   useEffect(() => {
-    chrome.storage.local.get(["keyword", "location", "results"], (data) => {
+    chrome.storage.local.get(["keyword", "location", "results", "nextPageToken"], (data) => {
       if (data.keyword) setKeyword(data.keyword);
       if (data.location) setLocation(data.location);
       if (data.results) setResults(data.results);
+      if (data.nextPageToken) setNextPageToken(data.nextPageToken);
     });
   }, []);
 
-  const handleSearch = () => {
+  const handleSearch = (pageToken?: string) => {
     if (!keyword || !location) {
       setError("Please enter both keyword and location");
       return;
@@ -35,14 +38,24 @@ const Popup: React.FC = () => {
     chrome.storage.local.set({ keyword, location });
 
     chrome.runtime.sendMessage(
-      { action: "search", keyword, location },
+      { action: "search", keyword, location, pageToken },
       (response) => {
         setIsLoading(false);
         if (response.error) {
           setError(response.error);
         } else {
-          setResults(response);
-          chrome.storage.local.set({ results: response });
+          // If loading more, append results. Otherwise replace.
+          const newResults = pageToken
+            ? [...results, ...response.results]
+            : response.results;
+
+          setResults(newResults);
+          setNextPageToken(response.nextPageToken || null);
+
+          chrome.storage.local.set({
+            results: newResults,
+            nextPageToken: response.nextPageToken || null
+          });
         }
       }
     );
@@ -61,7 +74,8 @@ const Popup: React.FC = () => {
 
     if (!value && field === "keyword") {
       setResults([]);
-      chrome.storage.local.remove(["keyword", "location", "results"]);
+      setNextPageToken(null);
+      chrome.storage.local.remove(["keyword", "location", "results", "nextPageToken"]);
     }
   };
 
@@ -74,7 +88,7 @@ const Popup: React.FC = () => {
   };
 
   return (
-    <div className="w-screen h-screen p-4 bg-white overflow-auto">
+    <div className="w-screen h-screen p-4 bg-white overflow-auto flex flex-col">
       <h1 className="text-2xl font-bold mb-4">Business Info Fetcher</h1>
 
       <div className="flex flex-col gap-4 mb-4 max-w-2xl">
@@ -112,18 +126,32 @@ const Popup: React.FC = () => {
             />
           </div>
           <button
-            onClick={handleSearch}
+            onClick={() => handleSearch()}
             disabled={isLoading || !keyword || !location}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-6 self-end"
           >
-            {isLoading ? "Searching..." : "Search"}
+            {isLoading && !results.length ? "Searching..." : "Search"}
           </button>
         </div>
 
         {error && <div className="text-red-500">{error}</div>}
       </div>
 
-      <Table results={results} handleLinkClick={handleLinkClick} />
+      <div className="flex-1 overflow-auto">
+        <Table results={results} handleLinkClick={handleLinkClick} />
+
+        {nextPageToken && (
+          <div className="mt-4 flex justify-center pb-4">
+            <button
+              onClick={() => handleSearch(nextPageToken)}
+              disabled={isLoading}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-gray-300 bg-white hover:bg-gray-50 h-10 px-8 disabled:opacity-50"
+            >
+              {isLoading ? "Loading more..." : "Load More Results"}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

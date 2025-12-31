@@ -1,4 +1,9 @@
+import { Semaphore } from "./utils/concurrency";
+
 console.log("Background script loaded");
+
+// Initialize semaphore with concurrency limit of 3
+const scrapeSemaphore = new Semaphore(3);
 
 interface BusinessInfo {
   name: string;
@@ -11,59 +16,90 @@ interface BusinessInfo {
   instagram?: string;
 }
 
+interface PlaceResult {
+  displayName?: { text: string };
+  formattedAddress?: string;
+  nationalPhoneNumber?: string;
+  websiteUri?: string;
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log("Message received:", request);
   if (request.action === "search") {
-    searchBusinesses(request.keyword, request.location)
-      .then(async (results) => {
-        console.log("Search results:", results); // Debug log
-        const enrichedResults = await Promise.all(
-          results.map(enrichBusinessData)
-        );
-        console.log("Enriched results:", enrichedResults); // Debug log
-        sendResponse(enrichedResults);
-      })
-      .catch((error) => {
-        console.error("Search error:", error); // Debug log
-        sendResponse({ error: error.message });
-      });
-    return true;
+    handleSearch(request.keyword, request.location, request.pageToken, sendResponse);
+    return true; // Keep message channel open for async response
   }
 });
 
+async function handleSearch(
+  keyword: string,
+  location: string,
+  pageToken: string | undefined, // Add pageToken param
+  sendResponse: (response: any) => void
+) {
+  try {
+    const { results, nextPageToken } = await searchBusinesses(keyword, location, pageToken); // Pass token
+    console.log("Search results:", results);
+
+    // Process enrichment with concurrency limit
+    const enrichedResults = await Promise.all(
+      results.map((business) =>
+        scrapeSemaphore.run(() => enrichBusinessData(business))
+      )
+    );
+
+    console.log("Enriched results:", enrichedResults);
+    sendResponse({ results: enrichedResults, nextPageToken }); // Return both
+  } catch (error: any) {
+    console.error("Search error:", error);
+    sendResponse({ error: error.message });
+  }
+}
+
 async function searchBusinesses(
   keyword: string,
-  location: string
-): Promise<BusinessInfo[]> {
-  const apiKey = "AIzaSyCK4XcoqrLmsZUAtvztrJzDFNKgNqApHWA";
+  location: string,
+  pageToken?: string // Add pageToken param
+): Promise<{ results: BusinessInfo[]; nextPageToken?: string }> { // Update return type
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const searchUrl = "https://places.googleapis.com/v1/places:searchText";
 
-  // Include location in the search query
-  const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
-    keyword
-  )}+in+${encodeURIComponent(location)}&key=${apiKey}`;
+  const requestBody: any = {
+    textQuery: `${keyword} in ${location}`,
+  };
 
-  const searchResponse = await fetch(searchUrl);
-  const searchData = await searchResponse.json();
+  // Add pageToken if it exists
+  if (pageToken) {
+    requestBody.pageToken = pageToken;
+  }
 
-  // Then get detailed information for each place
-  const detailedResults = await Promise.all(
-    searchData.results.map(async (place: any) => {
-      const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=name,formatted_address,formatted_phone_number,website&key=${apiKey}`;
-      const detailsResponse = await fetch(detailsUrl);
-      const detailsData = await detailsResponse.json();
+  const response = await fetch(searchUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": apiKey || "",
+      "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.id,nextPageToken", // Add nextPageToken to mask
+    },
+    body: JSON.stringify(requestBody),
+  });
 
-      return {
-        name: detailsData.result.name || place.name,
-        address:
-          detailsData.result.formatted_address || place.formatted_address,
-        phone: detailsData.result.formatted_phone_number,
-        website: detailsData.result.website,
-      };
-    })
-  );
+  if (!response.ok) {
+    const errorBody = await response.text();
+    console.error("Google API Error Body:", errorBody);
+    throw new Error(`Places API error: ${response.status} ${errorBody}`);
+  }
 
-  console.log("Detailed results:", detailedResults); // Debug log
-  return detailedResults;
+  const data = await response.json();
+  const places = (data.places as PlaceResult[]) || [];
+
+  const results = places.map((place) => ({
+    name: place.displayName?.text || "",
+    address: place.formattedAddress || "",
+    phone: place.nationalPhoneNumber,
+    website: place.websiteUri,
+  }));
+
+  return { results, nextPageToken: data.nextPageToken };
 }
 
 async function enrichBusinessData(
@@ -82,6 +118,7 @@ async function enrichBusinessData(
 
   if (business.website) {
     try {
+      console.log(`Scraping ${business.website}...`);
       // Get emails from main page
       const mainEmails = await scrapeEmailsFromUrl(business.website);
       emails.push(...mainEmails);
@@ -143,8 +180,12 @@ async function findContactPage(baseUrl: string): Promise<string | null> {
     for (const pattern of contactPatterns) {
       const match = html.match(pattern);
       if (match && match[1]) {
-        const contactUrl = new URL(match[1], baseUrl).href;
-        return contactUrl;
+        // Handle relative URLs
+        try {
+          return new URL(match[1], baseUrl).href;
+        } catch {
+          return null;
+        }
       }
     }
 

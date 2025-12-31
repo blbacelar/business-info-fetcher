@@ -1,5 +1,6 @@
 const path = require("path");
 const CopyPlugin = require("copy-webpack-plugin");
+const Dotenv = require("dotenv-webpack");
 
 module.exports = {
   mode: "development",
@@ -35,5 +36,6 @@ module.exports = {
         { from: "popup.html", to: "popup.html" },
       ],
     }),
+    new Dotenv(),
   ],
 };
